@@ -7,6 +7,10 @@ Built with **LangGraph** + **Claude Sonnet** + **pg_stat_statements** + **pgstat
 
 > 🎯 Phase 3: Human-in-the-loop remediation workflows
 
+## Demo
+
+[![asciicast](https://asciinema.org/a/yZg00cNeEJrhPJvu.svg)](https://asciinema.org/a/yZg00cNeEJrhPJvu)
+
 ---
 
 ## What It Does
