@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ai-dbre-postgres
+    environment:
+      POSTGRES_USER: dbre_admin
+      POSTGRES_PASSWORD: dbre_secret
+      POSTGRES_DB: dbre_testdb
+    ports:
+      - "5434:5432"   # Use 5434 to avoid conflicts with local PG/Patroni
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./pg_config/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./pg_config/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbre_admin -d dbre_testdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
