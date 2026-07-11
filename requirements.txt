@@ -18,3 +18,6 @@ pydantic-settings>=2.0.0
 
 # --- Observability (optional but recommended) ---
 langsmith>=0.2.0
+
+# --- Dashboard (Phase 4) ---
+streamlit>=1.38.0

@@ -1,11 +1,10 @@
-
 # AI DBRE — AI Database Reliability Engineer
 
 An autonomous AI agent that detects, analyzes, and remediates performance issues in PostgreSQL databases — with human-in-the-loop approval for all write operations.
 
 Built with **LangGraph** + **Claude Sonnet** + **pg_stat_statements** + **pgstattuple**.
 
-> 🎯 Phase 3: Human-in-the-loop remediation workflows
+> 🎯 Phase 4: Streamlit dashboard, GitHub Actions CI, open-source release
 
 ## Demo
 
@@ -190,6 +189,18 @@ python scheduler/runner.py --interval 300
 python scheduler/runner.py --interval 300 --agent
 ```
 
+### 8. Launch the dashboard (Phase 4)
+
+```bash
+streamlit run ui/app.py
+```
+
+Opens a web UI at `http://localhost:8501` with four pages:
+- **Health Overview** — real-time metrics, alerts, per-table health
+- **Query Explorer** — browse slow queries, run EXPLAIN ANALYZE with one click
+- **Remediation Log** — audit trail of all proposed/executed actions
+- **Agent Chat** — web-based chat with approval flow for remediation
+
 ## Project Structure
 
 ```
@@ -213,15 +224,26 @@ ai-dbre/
 │   ├── bloat_detection.py          # Table + index bloat (pgstattuple)
 │   ├── vacuum_monitor.py           # Autovacuum health + vacuum status
 │   └── remediation.py              # Whitelisted write ops (requires approval)
+├── ui/
+│   ├── app.py                      # Streamlit dashboard — Health Overview
+│   └── pages/
+│       ├── 1_query_explorer.py     # Browse + EXPLAIN slow queries
+│       ├── 2_remediation_log.py    # Audit trail timeline
+│       └── 3_agent_chat.py         # Web-based agent chat with approval
 ├── scheduler/
 │   └── runner.py                   # Proactive health check scheduler
 ├── scripts/
 │   ├── generate_slow_workload.py   # Create bad queries for testing
 │   └── test_connection.py          # Smoke test DB + tools
+├── .github/
+│   └── workflows/
+│       └── ci.yml                  # GitHub Actions CI pipeline
 ├── main.py                         # Interactive CLI with approval flow
 ├── remediation_audit.jsonl         # Auto-generated audit trail
 ├── requirements.txt
 ├── .env.example
+├── LICENSE                         # MIT License
+├── CONTRIBUTING.md                 # How to add tools and contribute
 ├── TROUBLESHOOTING.md              # Setup issues and fixes
 └── README.md
 ```
@@ -253,7 +275,7 @@ with timestamp, SQL, reason, and status (SUCCESS/REJECTED/BLOCKED/ERROR).
 - [x] Phase 1 — Slow query detection, EXPLAIN analysis, lock contention diagnosis
 - [x] Phase 2 — Bloat detection, vacuum monitoring, proactive scanning
 - [x] Phase 3 — Human-in-the-loop remediation workflows
-- [ ] Phase 4 — Streamlit dashboard + open-source release
+- [x] Phase 4 — Streamlit dashboard, GitHub Actions CI, open-source release
 
 ## Tech Stack
 

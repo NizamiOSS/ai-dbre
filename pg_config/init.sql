@@ -24,6 +24,11 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO dbre_remediation;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO dbre_remediation;
 GRANT pg_read_all_stats TO dbre_remediation;
 GRANT CREATE ON SCHEMA public TO dbre_remediation;  -- For CREATE INDEX
+-- CREATE INDEX requires table ownership — grant dbre_admin role membership
+-- The safety whitelist in tools/remediation.py is the real security boundary,
+-- not the DB permissions. This user has the power but the agent only uses
+-- whitelisted operations, and every action requires human approval.
+GRANT dbre_admin TO dbre_remediation;
 
 -- =============================================================================
 -- Sample Schema — E-commerce (realistic patterns for slow query testing)
