@@ -7,8 +7,18 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # Anthropic
+    # LLM Configuration
+    llm_provider: str = "anthropic"     # Options: anthropic, openai, ollama
+    llm_model: str = "claude-sonnet-4-6"
+    llm_temperature: float = 0.0
+    llm_max_tokens: int = 4096
+
+    # API Keys (set the one matching your provider)
     anthropic_api_key: str = ""
+    openai_api_key: str = ""
+
+    # Ollama settings (for local models)
+    ollama_base_url: str = "http://localhost:11434"
 
     # PostgreSQL (agent connection — read-only)
     pg_host: str = "localhost"

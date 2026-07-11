@@ -31,7 +31,6 @@ Flow:
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
-from langchain_anthropic import ChatAnthropic
 
 from agent.state import DBREState
 from agent.prompts import SYSTEM_PROMPT
@@ -81,13 +80,52 @@ REMEDIATION_TOOL_NAMES = {t.name for t in REMEDIATION_TOOLS}
 
 
 def create_llm():
-    """Create the Claude model with ALL tools bound (diagnostic + remediation)."""
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-6",
-        api_key=settings.anthropic_api_key,
-        temperature=0,
-        max_tokens=4096,
-    )
+    """
+    Create the LLM based on the configured provider.
+
+    Supports:
+    - anthropic: Claude models via Anthropic API
+    - openai: GPT models via OpenAI API
+    - ollama: Local models via Ollama (llama3, mistral, etc.)
+
+    Configure via .env:
+        LLM_PROVIDER=anthropic
+        LLM_MODEL=claude-sonnet-4-6
+    """
+    provider = settings.llm_provider.lower()
+
+    if provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        llm = ChatAnthropic(
+            model=settings.llm_model,
+            api_key=settings.anthropic_api_key,
+            temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
+        )
+
+    elif provider == "openai":
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(
+            model=settings.llm_model,
+            api_key=settings.openai_api_key,
+            temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
+        )
+
+    elif provider == "ollama":
+        from langchain_ollama import ChatOllama
+        llm = ChatOllama(
+            model=settings.llm_model,
+            base_url=settings.ollama_base_url,
+            temperature=settings.llm_temperature,
+        )
+
+    else:
+        raise ValueError(
+            f"Unknown LLM_PROVIDER: '{provider}'. "
+            f"Supported: anthropic, openai, ollama"
+        )
+
     return llm.bind_tools(ALL_TOOLS)
 
 

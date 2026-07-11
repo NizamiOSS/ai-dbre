@@ -4,8 +4,12 @@
 
 # --- Agent Framework ---
 langgraph>=1.2.0
-langchain-anthropic>=0.3.0
 langchain-core>=0.3.0
+
+# --- LLM Providers (install the one you need) ---
+langchain-anthropic>=0.3.0       # Default: Claude models
+# langchain-openai>=0.3.0        # Uncomment for GPT models
+# langchain-ollama>=0.3.0        # Uncomment for local models via Ollama
 
 # --- Database ---
 psycopg2-binary>=2.9.9

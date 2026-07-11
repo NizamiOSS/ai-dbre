@@ -277,13 +277,51 @@ with timestamp, SQL, reason, and status (SUCCESS/REJECTED/BLOCKED/ERROR).
 - [x] Phase 3 — Human-in-the-loop remediation workflows
 - [x] Phase 4 — Streamlit dashboard, GitHub Actions CI, open-source release
 
+## LLM Configuration
+
+The agent supports multiple LLM providers. Configure in `.env`:
+
+**Anthropic (default):**
+```env
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-4-6
+ANTHROPIC_API_KEY=sk-ant-xxxxx
+```
+
+**OpenAI:**
+```env
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o
+OPENAI_API_KEY=sk-xxxxx
+```
+```bash
+pip install langchain-openai
+```
+
+**Ollama (local, free):**
+```env
+LLM_PROVIDER=ollama
+LLM_MODEL=llama3.1
+OLLAMA_BASE_URL=http://localhost:11434
+```
+```bash
+pip install langchain-ollama
+ollama pull llama3.1
+```
+
+Note: tool-calling quality varies by model. Claude Sonnet and GPT-4o handle complex
+multi-tool diagnostic chains well. Smaller local models may struggle with reasoning
+over EXPLAIN plans or chaining 5+ tool calls.
+
 ## Tech Stack
 
 | Component | Choice | Why |
 |-----------|--------|-----|
 | Agent framework | LangGraph 1.2.x | Stateful graphs, ReAct loops, HITL support |
-| LLM | Claude Sonnet 4.6 | Best cost/quality for tool-calling agents |
+| LLM (default) | Claude Sonnet 4.6 | Best cost/quality for tool-calling agents |
+| LLM (alternatives) | GPT-4o, Llama 3.1, Mistral | Configurable via .env |
 | Database | PostgreSQL 16 | Industry standard, rich pg_stat ecosystem |
+| Dashboard | Streamlit | Python-native, fast to build |
 | Language | Python 3.11+ | LangGraph native, psycopg2/asyncpg ecosystem |
 
 ## License
