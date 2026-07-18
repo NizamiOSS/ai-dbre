@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     pg_remediation_user: str = "dbre_remediation"
     pg_remediation_password: str = "remediation_write"
 
+    # Postgresql (agent evaluation)
+    eval_db_user: str = "dbre_admin"
+    eval_db_password: str = "dbre_admin_pass"
+
     # Agent behavior
     slow_query_threshold_ms: float = 500.0
     max_results: int = 10

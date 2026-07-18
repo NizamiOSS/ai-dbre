@@ -1,0 +1,78 @@
+name: unused_indexes
+description: >
+  A table has multiple indexes that are never used by any query.
+  These waste disk space and slow down writes. The agent should
+  identify them via index usage stats and recommend removal.
+category: index
+
+setup:
+  - |
+    DROP TABLE IF EXISTS eval_unused_idx_test CASCADE;
+  - |
+    CREATE TABLE eval_unused_idx_test (
+      id serial PRIMARY KEY,
+      col_a text,
+      col_b integer,
+      col_c timestamp DEFAULT now(),
+      col_d text,
+      col_e numeric(10,2)
+    );
+  - |
+    INSERT INTO eval_unused_idx_test (col_a, col_b, col_c, col_d, col_e)
+    SELECT
+      md5(g::text),
+      g % 1000,
+      now() - (random() * interval '90 days'),
+      repeat('d', 50),
+      (random() * 1000)::numeric(10,2)
+    FROM generate_series(1, 60000) g;
+  # Create several indexes that will never be used
+  - |
+    CREATE INDEX idx_eval_unused_a ON eval_unused_idx_test (col_a);
+  - |
+    CREATE INDEX idx_eval_unused_b ON eval_unused_idx_test (col_b);
+  - |
+    CREATE INDEX idx_eval_unused_d ON eval_unused_idx_test (col_d);
+  - |
+    CREATE INDEX idx_eval_unused_bc ON eval_unused_idx_test (col_b, col_c);
+  - |
+    ANALYZE eval_unused_idx_test;
+  # Reset stats for this table only (doesn't require superuser)
+  - |
+    SELECT pg_stat_reset_single_table_counters(oid)
+    FROM pg_class WHERE relname = 'eval_unused_idx_test';
+  # Only query by id (PK) — the other indexes get zero scans
+  - |
+    SELECT * FROM eval_unused_idx_test WHERE id = 100;
+  - |
+    SELECT * FROM eval_unused_idx_test WHERE id = 500;
+  - |
+    SELECT * FROM eval_unused_idx_test WHERE id BETWEEN 1000 AND 1010;
+
+prompt: >
+  Analyze index usage across the database. Are there any indexes
+  that are not being used?
+
+expected:
+  root_cause: "multiple unused indexes on eval_unused_idx_test wasting space and slowing writes"
+  root_cause_keywords:
+    - "unused index"
+    - "eval_unused_idx_test"
+    - "zero scan"
+  affected_objects:
+    - "eval_unused_idx_test"
+    - "idx_eval_unused_a"
+    - "idx_eval_unused_b"
+    - "idx_eval_unused_d"
+    - "idx_eval_unused_bc"
+  tools_must_call:
+    - "get_index_usage"
+  tools_should_call:
+    - "get_table_stats"
+  fix_category: "drop_index"
+  fix_keywords:
+    - "DROP INDEX"
+    - "unused"
+
+teardown:
+  - "DROP TABLE IF EXISTS eval_unused_idx_test CASCADE;"

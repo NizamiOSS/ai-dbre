@@ -1,0 +1,140 @@
+name: Eval Suite
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agent/**'
+      - 'tools/**'
+      - 'tests/eval/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'agent/**'
+      - 'tools/**'
+      - 'tests/eval/**'
+  workflow_dispatch:  # Allow manual runs
+
+env:
+  PG_HOST: localhost
+  PG_PORT: 5434
+  PG_DATABASE: ai_dbre_test
+  EVAL_DB_USER: dbre_admin
+  EVAL_DB_PASSWORD: dbre_admin_pass
+
+jobs:
+  eval:
+    name: Run Eval Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ai_dbre_test
+          POSTGRES_USER: dbre_admin
+          POSTGRES_PASSWORD: dbre_admin_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5434:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pyyaml
+
+      - name: Set up database extensions
+        run: |
+          PGPASSWORD=${{ env.EVAL_DB_PASSWORD }} psql \
+            -h localhost -p 5434 \
+            -U ${{ env.EVAL_DB_USER }} \
+            -d ${{ env.PG_DATABASE }} \
+            -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
+          PGPASSWORD=${{ env.EVAL_DB_PASSWORD }} psql \
+            -h localhost -p 5434 \
+            -U ${{ env.EVAL_DB_USER }} \
+            -d ${{ env.PG_DATABASE }} \
+            -c "CREATE EXTENSION IF NOT EXISTS pgstattuple;"
+
+      - name: Run seed data (if init.sql exists)
+        run: |
+          if [ -f pg_config/init.sql ]; then
+            PGPASSWORD=${{ env.EVAL_DB_PASSWORD }} psql \
+              -h localhost -p 5434 \
+              -U ${{ env.EVAL_DB_USER }} \
+              -d ${{ env.PG_DATABASE }} \
+              -f pg_config/init.sql
+          fi
+
+      - name: Run eval suite
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'anthropic' }}
+        run: |
+          python -m pytest tests/eval/ -v \
+            --tb=short \
+            --pass-threshold=0.70 \
+            2>&1 | tee eval_output.txt
+
+      - name: Generate JSON report
+        if: always()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python -m tests.eval.report \
+            --output eval_report.json \
+            --pass-threshold=0.70 \
+          || true
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: |
+            eval_report.json
+            eval_output.txt
+            eval_traces/
+
+      - name: Post eval summary to PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync('eval_report.json', 'utf8'));
+            } catch (e) {
+              console.log('No eval report found, skipping PR comment');
+              return;
+            }
+            const s = report.summary;
+            const emoji = s.all_passed ? '✅' : '❌';
+            let body = `## ${emoji} Eval Suite: ${s.passed}/${s.total_scenarios} passed (${s.pass_rate})\n\n`;
+            body += `| Scenario | Score | Status |\n|---|---|---|\n`;
+            for (const sc of report.scenarios) {
+              const icon = sc.passed ? '✅' : '❌';
+              body += `| ${sc.name} | ${(sc.composite_score * 100).toFixed(0)}% | ${icon} |\n`;
+            }
+            body += `\nAverage score: **${(s.average_score * 100).toFixed(0)}%** · Threshold: ${(s.pass_threshold * 100).toFixed(0)}%`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });

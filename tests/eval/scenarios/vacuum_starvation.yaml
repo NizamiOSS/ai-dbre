@@ -1,0 +1,62 @@
+name: vacuum_starvation
+description: >
+  A high-churn table has autovacuum disabled, causing dead tuples to
+  accumulate with no automatic cleanup. The agent should detect the
+  vacuum starvation condition and recommend enabling autovacuum or
+  running manual VACUUM.
+category: vacuum
+
+setup:
+  - |
+    DROP TABLE IF EXISTS eval_vacuum_starved CASCADE;
+  - |
+    CREATE TABLE eval_vacuum_starved (
+      id serial PRIMARY KEY,
+      sensor_value numeric(8,2),
+      recorded_at timestamp DEFAULT now()
+    );
+  # Disable autovacuum on this table
+  - |
+    ALTER TABLE eval_vacuum_starved SET (autovacuum_enabled = false);
+  - |
+    INSERT INTO eval_vacuum_starved (sensor_value)
+    SELECT random() * 100
+    FROM generate_series(1, 80000);
+  - |
+    ANALYZE eval_vacuum_starved;
+  # Churn: delete and re-insert to create dead tuples
+  - |
+    DELETE FROM eval_vacuum_starved WHERE id <= 40000;
+  - |
+    INSERT INTO eval_vacuum_starved (sensor_value)
+    SELECT random() * 100
+    FROM generate_series(1, 40000);
+  - |
+    UPDATE eval_vacuum_starved SET sensor_value = sensor_value + 1
+    WHERE id > 80000;
+
+prompt: >
+  Run a health check on the database. Pay attention to vacuum and
+  autovacuum status.
+
+expected:
+  root_cause: "autovacuum disabled on eval_vacuum_starved causing dead tuple accumulation"
+  root_cause_keywords:
+    - "autovacuum"
+    - "disabled"
+    - "dead tuple"
+    - "eval_vacuum_starved"
+  affected_objects:
+    - "eval_vacuum_starved"
+  tools_must_call:
+    - "get_vacuum_status"
+  tools_should_call:
+    - "get_table_stats"
+    - "get_table_bloat"
+  fix_category: "vacuum"
+  fix_keywords:
+    - "VACUUM"
+    - "autovacuum"
+
+teardown:
+  - "DROP TABLE IF EXISTS eval_vacuum_starved CASCADE;"

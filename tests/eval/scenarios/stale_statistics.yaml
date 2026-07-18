@@ -1,0 +1,66 @@
+name: stale_statistics
+description: >
+  A table's statistics are stale — the planner's row estimates are wildly
+  off from reality because ANALYZE hasn't run after major data changes.
+  This causes the optimizer to choose bad plans (e.g. nested loop instead
+  of hash join, or wrong join order). The agent should detect the
+  estimate-vs-actual divergence and recommend ANALYZE.
+category: query
+
+setup:
+  - |
+    DROP TABLE IF EXISTS eval_stale_stats CASCADE;
+  - |
+    CREATE TABLE eval_stale_stats (
+      id serial PRIMARY KEY,
+      category_id integer NOT NULL,
+      description text,
+      created_at timestamp DEFAULT now()
+    );
+  # Insert a small amount of data and analyze
+  - |
+    INSERT INTO eval_stale_stats (category_id, description)
+    SELECT 1, 'initial'
+    FROM generate_series(1, 100);
+  - |
+    ANALYZE eval_stale_stats;
+  # Now bulk insert 100x more rows WITHOUT re-analyzing.
+  # The planner will think the table has ~100 rows when it has ~100,100.
+  - |
+    INSERT INTO eval_stale_stats (category_id, description)
+    SELECT
+      (random() * 50)::int,
+      repeat('data', 25)
+    FROM generate_series(1, 100000);
+  # Run queries that will get bad plans due to stale stats
+  - |
+    SELECT count(*) FROM eval_stale_stats WHERE category_id = 5;
+  - |
+    SELECT * FROM eval_stale_stats WHERE category_id = 10 ORDER BY created_at DESC LIMIT 20;
+  - |
+    SELECT category_id, count(*) FROM eval_stale_stats GROUP BY category_id ORDER BY count(*) DESC;
+
+prompt: >
+  Check if there are any tables with stale statistics or where
+  the query planner estimates might be inaccurate.
+
+expected:
+  root_cause: "stale statistics on eval_stale_stats causing inaccurate planner estimates"
+  root_cause_keywords:
+    - "stale"
+    - "statistics"
+    - "eval_stale_stats"
+    - "estimate"
+  affected_objects:
+    - "eval_stale_stats"
+  tools_must_call:
+    - "get_table_stats"
+  tools_should_call:
+    - "explain_query"
+  fix_category: "analyze"
+  fix_keywords:
+    - "ANALYZE"
+    - "statistics"
+
+teardown:
+  - "DROP TABLE IF EXISTS eval_stale_stats CASCADE;"

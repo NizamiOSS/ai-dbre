@@ -1,0 +1,67 @@
+name: missing_index_on_filter_column
+description: >
+  A large table is queried with a WHERE clause on an unindexed column,
+  forcing a sequential scan. The agent should identify the missing index
+  via slow query analysis and EXPLAIN plan inspection.
+category: index
+
+setup:
+  # Create a table with no index on the filtered column
+  - |
+    DROP TABLE IF EXISTS eval_orders_missing_idx CASCADE;
+  - |
+    CREATE TABLE eval_orders_missing_idx (
+      id serial PRIMARY KEY,
+      customer_id integer NOT NULL,
+      order_date timestamp NOT NULL DEFAULT now(),
+      status text NOT NULL DEFAULT 'pending',
+      total_amount numeric(10,2) NOT NULL DEFAULT 0
+    );
+  - |
+    INSERT INTO eval_orders_missing_idx (customer_id, order_date, status, total_amount)
+    SELECT
+      (random() * 10000)::int,
+      now() - (random() * interval '365 days'),
+      (ARRAY['pending','shipped','delivered','cancelled'])[floor(random()*4+1)::int],
+      (random() * 500)::numeric(10,2)
+    FROM generate_series(1, 100000);
+  - |
+    ANALYZE eval_orders_missing_idx;
+  # Run a slow query multiple times to register in pg_stat_statements
+  - |
+    SELECT count(*) FROM eval_orders_missing_idx WHERE customer_id = 42;
+  - |
+    SELECT count(*) FROM eval_orders_missing_idx WHERE customer_id = 99;
+  - |
+    SELECT count(*) FROM eval_orders_missing_idx WHERE customer_id = 150;
+  - |
+    SELECT * FROM eval_orders_missing_idx WHERE customer_id = 200 ORDER BY order_date DESC LIMIT 10;
+  - |
+    SELECT avg(total_amount) FROM eval_orders_missing_idx WHERE customer_id BETWEEN 100 AND 200;
+
+prompt: >
+  Analyze the database for performance issues. Focus on slow queries
+  and suggest improvements.
+
+expected:
+  root_cause: "sequential scan on eval_orders_missing_idx due to missing index on customer_id"
+  root_cause_keywords:
+    - "sequential scan"
+    - "missing index"
+    - "customer_id"
+    - "eval_orders_missing_idx"
+  affected_objects:
+    - "eval_orders_missing_idx"
+  tools_must_call:
+    - "get_slow_queries"
+  tools_should_call:
+    - "explain_query"
+    - "get_index_usage"
+    - "get_table_stats"
+  fix_category: "create_index"
+  fix_keywords:
+    - "CREATE INDEX"
+    - "customer_id"
+
+teardown:
+  - "DROP TABLE IF EXISTS eval_orders_missing_idx CASCADE;"

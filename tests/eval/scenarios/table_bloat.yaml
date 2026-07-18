@@ -1,0 +1,54 @@
+name: table_bloat_from_updates
+description: >
+  A table accumulates significant dead tuples from repeated updates
+  without vacuuming. The agent should detect the bloat via table stats
+  and bloat estimation tools, and recommend VACUUM.
+category: bloat
+
+setup:
+  - |
+    DROP TABLE IF EXISTS eval_bloat_test CASCADE;
+  - |
+    CREATE TABLE eval_bloat_test (
+      id serial PRIMARY KEY,
+      status text NOT NULL DEFAULT 'active',
+      updated_at timestamp NOT NULL DEFAULT now(),
+      payload text NOT NULL DEFAULT repeat('x', 200)
+    );
+  - |
+    INSERT INTO eval_bloat_test (status, payload)
+    SELECT 'active', repeat('x', 200)
+    FROM generate_series(1, 50000);
+  - |
+    ANALYZE eval_bloat_test;
+  # Generate bloat: update every row 3 times without vacuuming
+  - |
+    UPDATE eval_bloat_test SET status = 'processing', updated_at = now();
+  - |
+    UPDATE eval_bloat_test SET status = 'completed', updated_at = now();
+  - |
+    UPDATE eval_bloat_test SET status = 'archived', updated_at = now();
+
+prompt: >
+  Check the database health. Are there any tables with bloat or
+  maintenance issues?
+
+expected:
+  root_cause: "table eval_bloat_test has significant bloat from dead tuples needing vacuum"
+  root_cause_keywords:
+    - "bloat"
+    - "dead tuple"
+    - "eval_bloat_test"
+  affected_objects:
+    - "eval_bloat_test"
+  tools_must_call:
+    - "get_table_bloat"
+  tools_should_call:
+    - "get_vacuum_status"
+    - "get_table_stats"
+  fix_category: "vacuum"
+  fix_keywords:
+    - "VACUUM"
+
+teardown:
+  - "DROP TABLE IF EXISTS eval_bloat_test CASCADE;"

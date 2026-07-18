@@ -25,3 +25,6 @@ pgdata/
 .DS_Store
 Thumbs.db
 demo.cast
+
+# Eval
+eval_traces/
