@@ -25,6 +25,7 @@ Usage:
 
 import sys
 import os
+import json
 
 # Ensure the project root is on the Python path so we can import
 # agent.db, agent.config, and tools.*
@@ -256,6 +257,132 @@ def get_autovacuum_activity() -> str:
         processing, progress percentage, and runtime.
     """
     return _get_autovacuum_activity.invoke({})
+
+
+
+# =============================================================================
+# MCP Resources — Live Database State
+# =============================================================================
+#
+# Resources are read-only data the client can pull as context BEFORE asking
+# questions. Unlike tools (which the LLM decides to call), resources are
+# loaded by the client to give the LLM background knowledge upfront.
+#
+
+@mcp.resource(
+    "dbre://health/summary",
+    description=(
+        "Live database health summary. Returns all active alerts from "
+        "8 automated checks: cache hit ratio, sequential scans, dead tuples, "
+        "index bloat, unused indexes, XID wraparound, long queries, vacuum status."
+    ),
+    mime_type="application/json",
+)
+def health_summary() -> str:
+    """Run all health checks and return alerts as JSON."""
+    from agent.health_check import run_health_check
+
+    result = run_health_check()
+    return json.dumps(result, indent=2, default=str)
+
+
+@mcp.resource(
+    "dbre://stats/tables",
+    description=(
+        "Current table-level statistics for all user tables: "
+        "live/dead tuple counts, sequential vs index scan ratios, "
+        "last vacuum/analyze timestamps, and table sizes."
+    ),
+    mime_type="application/json",
+)
+def table_stats_resource() -> str:
+    """Fetch table statistics via the existing diagnostic tool."""
+    return _get_table_stats.invoke({})
+
+
+@mcp.resource(
+    "dbre://stats/indexes",
+    description=(
+        "Index usage statistics for all user indexes: "
+        "scan counts, tuple reads, index sizes, and unused index identification."
+    ),
+    mime_type="application/json",
+)
+def index_stats_resource() -> str:
+    """Fetch index usage stats via the existing diagnostic tool."""
+    return _get_index_usage.invoke({})
+
+
+@mcp.resource(
+    "dbre://stats/vacuum",
+    description=(
+        "Vacuum and autovacuum status for all tables: "
+        "last vacuum timestamps, dead tuple counts, autovacuum settings, "
+        "and whether vacuum is overdue."
+    ),
+    mime_type="application/json",
+)
+def vacuum_status_resource() -> str:
+    """Fetch vacuum status via the existing diagnostic tool."""
+    return _get_vacuum_status.invoke({})
+
+
+@mcp.resource(
+    "dbre://stats/bloat",
+    description=(
+        "Table bloat levels across the database: "
+        "dead tuple percentages, table sizes, HOT update ratios, "
+        "and vacuum recommendations."
+    ),
+    mime_type="application/json",
+)
+def bloat_resource() -> str:
+    """Fetch bloat stats via the existing diagnostic tool."""
+    return _get_table_bloat.invoke({})
+
+
+# =============================================================================
+# MCP Resource Templates — Per-Table Details
+# =============================================================================
+
+@mcp.resource(
+    "dbre://tables/{table_name}/stats",
+    description="Detailed statistics for a specific table.",
+    mime_type="application/json",
+)
+def table_detail_stats(table_name: str) -> str:
+    """Fetch stats for a single table."""
+    return _get_table_stats.invoke({"table_name": table_name})
+
+
+@mcp.resource(
+    "dbre://tables/{table_name}/indexes",
+    description="Index usage details for a specific table.",
+    mime_type="application/json",
+)
+def table_detail_indexes(table_name: str) -> str:
+    """Fetch index usage for a single table."""
+    return _get_index_usage.invoke({"table_name": table_name})
+
+
+@mcp.resource(
+    "dbre://tables/{table_name}/bloat",
+    description="Bloat analysis for a specific table.",
+    mime_type="application/json",
+)
+def table_detail_bloat(table_name: str) -> str:
+    """Fetch bloat stats for a single table."""
+    return _get_table_bloat.invoke({"table_name": table_name})
+
+
+@mcp.resource(
+    "dbre://tables/{table_name}/vacuum",
+    description="Vacuum status for a specific table.",
+    mime_type="application/json",
+)
+def table_detail_vacuum(table_name: str) -> str:
+    """Fetch vacuum status for a single table."""
+    return _get_vacuum_status.invoke({"table_name": table_name})
 
 
 # =============================================================================
