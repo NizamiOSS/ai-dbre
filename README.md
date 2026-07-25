@@ -200,9 +200,89 @@ Opens a web UI at `http://localhost:8501` with four pages:
 - **Query Explorer** — browse slow queries, run EXPLAIN ANALYZE with one click
 - **Remediation Log** — audit trail of all proposed/executed actions
 - **Agent Chat** — web-based chat with approval flow for remediation
-
+## MCP Server
+ 
+AI DBRE exposes its diagnostic tools and live database state via the
+[Model Context Protocol](https://modelcontextprotocol.io), so any MCP-compatible
+client — Claude Desktop, Cursor, or a custom agent — can use them directly. The
+MCP server delegates to the same tool functions the LangGraph agent uses, so
+there's a single source of truth for all diagnostic logic.
+ 
+**Tools (10)** — the full diagnostic toolset: slow queries, active long queries,
+EXPLAIN analysis, table stats, index usage, lock info, table bloat, index bloat,
+vacuum status, and autovacuum activity.
+ 
+**Resources** — live database state that a client can read as context before
+asking a question:
+ 
+| Resource URI | Returns |
+|--------------|---------|
+| `dbre://health/summary` | All active alerts from the 8 automated health checks |
+| `dbre://stats/tables` | Table-level statistics for all user tables |
+| `dbre://stats/indexes` | Index usage statistics |
+| `dbre://stats/vacuum` | Vacuum and autovacuum status |
+| `dbre://stats/bloat` | Table bloat levels |
+| `dbre://tables/{table}/stats` | Per-table drill-down (stats, indexes, bloat, vacuum) |
+ 
+### Testing with MCP Inspector
+ 
+```bash
+mcp dev mcp_server/server.py
+```
+ 
+Opens a browser UI. Set **Command** to `python`, **Arguments** to
+`mcp_server/server.py`, and connect. The Tools and Resources tabs let you call
+each one manually.
+ 
+### Connecting to Claude Desktop
+ 
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
+(use absolute paths — Claude Desktop doesn't know your venv or working directory):
+ 
+```json
+{
+  "mcpServers": {
+    "ai-dbre": {
+      "command": "/absolute/path/to/ai-dbre/.venv/bin/python",
+      "args": ["/absolute/path/to/ai-dbre/mcp_server/server.py"]
+    }
+  }
+}
+```
+ 
+Credentials are read from `.env` automatically. Restart Claude Desktop, then ask
+about your database — Claude will call the tools and read the health resources as
+needed.
+ 
+## Evaluation Suite
+ 
+The eval harness validates diagnostic accuracy against known problems. Each
+scenario is defined declaratively in YAML — induce a problem, run the agent,
+score the diagnosis, clean up. Five scenarios ship today: missing indexes, table
+bloat, vacuum starvation, unused indexes, and stale statistics.
+ 
+```bash
+# Run all scenarios (deterministic scoring)
+pytest tests/eval/ -v
+ 
+# Include LLM-as-judge semantic scoring (one extra API call per scenario)
+pytest tests/eval/ -v --llm-judge
+ 
+# Run a single scenario
+pytest tests/eval/ -v -k missing_index
+```
+ 
+Scoring combines three layers: tool-call verification (did the agent call the
+right diagnostic tools?), keyword matching against the expected root cause and
+affected objects, and optional LLM-as-judge semantic scoring. Each scenario gets
+a weighted composite score; the pass threshold is 70%.
+ 
+Adding a new scenario is just a new YAML file in `tests/eval/scenarios/` — no
+Python changes needed. The eval workflow also runs in CI on every PR that touches
+the agent, tools, or eval code.
+ 
 ## Project Structure
-
+ 
 ```
 ai-dbre/
 ├── docker-compose.yml              # PostgreSQL 16 test environment
@@ -224,6 +304,9 @@ ai-dbre/
 │   ├── bloat_detection.py          # Table + index bloat (pgstattuple)
 │   ├── vacuum_monitor.py           # Autovacuum health + vacuum status
 │   └── remediation.py              # Whitelisted write ops (requires approval)
+├── mcp_server/
+│   ├── __init__.py
+│   └── server.py                   # MCP server — 10 tools + health/stats resources
 ├── ui/
 │   ├── app.py                      # Streamlit dashboard — Health Overview
 │   └── pages/
@@ -235,9 +318,19 @@ ai-dbre/
 ├── scripts/
 │   ├── generate_slow_workload.py   # Create bad queries for testing
 │   └── test_connection.py          # Smoke test DB + tools
+├── tests/
+│   └── eval/                       # Evaluation harness
+│       ├── scenarios/              # YAML scenario definitions
+│       ├── scenarios.py            # Scenario loader
+│       ├── runner.py               # Setup → run agent → capture trace → teardown
+│       ├── scoring.py              # Tool-call + keyword + LLM-as-judge scoring
+│       ├── report.py               # Terminal + JSON reports
+│       ├── conftest.py             # Pytest fixtures + CLI flags
+│       └── test_eval.py            # Parametrized eval tests
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                  # GitHub Actions CI pipeline
+│       ├── ci.yml                  # GitHub Actions CI pipeline
+│       └── eval.yml                # Eval suite workflow
 ├── main.py                         # Interactive CLI with approval flow
 ├── remediation_audit.jsonl         # Auto-generated audit trail
 ├── requirements.txt
@@ -247,35 +340,31 @@ ai-dbre/
 ├── TROUBLESHOOTING.md              # Setup issues and fixes
 └── README.md
 ```
-
+ 
 ## Safety
-
+ 
 Two-tier security model with separate database users:
-
+ 
 **Diagnostic tools** connect as `dbre_agent` (read-only). Cannot modify anything.
-
+ 
 **Remediation tool** connects as `dbre_remediation` (limited write). Can only:
 - CREATE INDEX / CREATE INDEX CONCURRENTLY
 - ANALYZE
 - VACUUM / VACUUM FREEZE / VACUUM FULL
 - REINDEX CONCURRENTLY
-
 Cannot DROP, DELETE, UPDATE, INSERT, ALTER, or TRUNCATE — these are blocked at both
 the SQL whitelist level (in `tools/remediation.py`) and the PostgreSQL permission level.
-
+ 
 **Human-in-the-loop**: The LangGraph graph uses `interrupt_before` on the remediation
 node. Every write operation pauses execution, displays the exact SQL to the operator,
 and waits for explicit `y/n` approval before running.
-
+ 
 **Audit trail**: Every proposed and executed action is logged to `remediation_audit.jsonl`
 with timestamp, SQL, reason, and status (SUCCESS/REJECTED/BLOCKED/ERROR).
-
-## Roadmap
-
-- [x] Phase 1 — Slow query detection, EXPLAIN analysis, lock contention diagnosis
-- [x] Phase 2 — Bloat detection, vacuum monitoring, proactive scanning
-- [x] Phase 3 — Human-in-the-loop remediation workflows
-- [x] Phase 4 — Streamlit dashboard, GitHub Actions CI, open-source release
+ 
+The MCP server exposes **only the read-only diagnostic tools and resources** —
+remediation is not exposed over MCP, so external clients cannot trigger writes.
+ 
 
 ## LLM Configuration
 
