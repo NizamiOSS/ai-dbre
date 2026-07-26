@@ -388,6 +388,38 @@ def table_detail_vacuum(table_name: str) -> str:
 # =============================================================================
 # Entry point
 # =============================================================================
+#
+# Two transport modes:
+#   python mcp_server/server.py              → stdio (Claude Desktop, local)
+#   python mcp_server/server.py --http       → StreamableHTTP (remote, team access)
+#
 
 if __name__ == "__main__":
-    mcp.run()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="AI DBRE MCP Server")
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help="Run with StreamableHTTP transport instead of stdio",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="HTTP host to bind to (default: 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="HTTP port to bind to (default: 8000)",
+    )
+    args = parser.parse_args()
+
+    if args.http:
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        print(f"AI DBRE MCP Server — StreamableHTTP on http://{args.host}:{args.port}/mcp")
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()
