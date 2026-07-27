@@ -222,7 +222,10 @@ asking a question:
 | `dbre://stats/indexes` | Index usage statistics |
 | `dbre://stats/vacuum` | Vacuum and autovacuum status |
 | `dbre://stats/bloat` | Table bloat levels |
-| `dbre://tables/{table}/stats` | Per-table drill-down (stats, indexes, bloat, vacuum) |
+| `dbre://tables/{table}/stats` | Stats for a specific table |
+| `dbre://tables/{table}/indexes` | Index usage for a specific table |
+| `dbre://tables/{table}/bloat` | Bloat analysis for a specific table |
+| `dbre://tables/{table}/vacuum` | Vacuum status for a specific table |
  
 ### Testing with MCP Inspector
  
@@ -234,7 +237,7 @@ Opens a browser UI. Set **Command** to `python`, **Arguments** to
 `mcp_server/server.py`, and connect. The Tools and Resources tabs let you call
 each one manually.
  
-### Connecting to Claude Desktop
+### Connecting to Claude Desktop (STDIO)
  
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
 (use absolute paths — Claude Desktop doesn't know your venv or working directory):
@@ -253,6 +256,21 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
 Credentials are read from `.env` automatically. Restart Claude Desktop, then ask
 about your database — Claude will call the tools and read the health resources as
 needed.
+
+### Remote Access (StreamableHTTP)
+
+For team access or integration with remote clients, run the server in HTTP mode:
+
+```bash
+# Default: localhost:8000
+python mcp_server/server.py --http
+
+# Custom host/port (e.g. accessible from the network)
+python mcp_server/server.py --http --host 0.0.0.0 --port 9000
+```
+
+The server listens at `http://<host>:<port>/mcp`. Same tools and resources,
+accessible over the network instead of local stdio.
  
 ## Evaluation Suite
  
