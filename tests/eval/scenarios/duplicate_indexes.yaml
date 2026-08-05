@@ -1,0 +1,78 @@
+name: duplicate_indexes
+description: >
+  A table has multiple indexes covering the same columns — exact duplicates
+  or near-duplicates (e.g. an index on (a) when (a, b) already exists).
+  These waste disk space and slow down every write operation without adding
+  read benefit. The agent should detect the redundancy via index usage
+  analysis and recommend dropping the duplicates.
+category: index
+
+setup:
+  - |
+    DROP TABLE IF EXISTS eval_dup_indexes CASCADE;
+  - |
+    CREATE TABLE eval_dup_indexes (
+      id serial PRIMARY KEY,
+      email text NOT NULL,
+      created_at timestamp DEFAULT now(),
+      status text DEFAULT 'active',
+      region text DEFAULT 'us-east'
+    );
+  - |
+    INSERT INTO eval_dup_indexes (email, created_at, status, region)
+    SELECT
+      'user' || g || '@example.com',
+      now() - (random() * interval '180 days'),
+      (ARRAY['active','inactive','suspended'])[floor(random()*3+1)::int],
+      (ARRAY['us-east','us-west','eu-west','ap-south'])[floor(random()*4+1)::int]
+    FROM generate_series(1, 60000) g;
+  # Create duplicate/overlapping indexes
+  - |
+    CREATE INDEX idx_eval_dup_email_1 ON eval_dup_indexes (email);
+  - |
+    CREATE INDEX idx_eval_dup_email_2 ON eval_dup_indexes (email);
+  - |
+    CREATE INDEX idx_eval_dup_status ON eval_dup_indexes (status);
+  - |
+    CREATE INDEX idx_eval_dup_status_region ON eval_dup_indexes (status, region);
+  - |
+    CREATE INDEX idx_eval_dup_region_status ON eval_dup_indexes (region, status);
+  - |
+    ANALYZE eval_dup_indexes;
+  # Reset stats so we can see which indexes actually get used
+  - |
+    SELECT pg_stat_reset_single_table_counters(oid)
+    FROM pg_class WHERE relname = 'eval_dup_indexes';
+  # Run queries that only use some of the indexes
+  - |
+    SELECT * FROM eval_dup_indexes WHERE email = 'user100@example.com';
+  - |
+    SELECT * FROM eval_dup_indexes WHERE email = 'user200@example.com';
+  - |
+    SELECT count(*) FROM eval_dup_indexes WHERE status = 'active' AND region = 'us-east';
+
+prompt: >
+  Check for duplicate or redundant indexes in the database. Are there
+  any indexes that overlap with each other?
+
+expected:
+  root_cause: "duplicate and overlapping indexes on eval_dup_indexes wasting space and slowing writes"
+  root_cause_keywords:
+    - "duplicate"
+    - "eval_dup_indexes"
+    - "redundant"
+  affected_objects:
+    - "eval_dup_indexes"
+    - "idx_eval_dup_email_1"
+    - "idx_eval_dup_email_2"
+  tools_must_call:
+    - "get_index_usage"
+  tools_should_call:
+    - "get_table_stats"
+  fix_category: "drop_index"
+  fix_keywords:
+    - "DROP INDEX"
+    - "duplicate"
+
+teardown:
+  - "DROP TABLE IF EXISTS eval_dup_indexes CASCADE;"

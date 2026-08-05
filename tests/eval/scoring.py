@@ -364,6 +364,10 @@ def _fix_category_variants(category: str) -> list[str]:
             "change setting", "adjust parameter", "increase",
             "decrease", "set to", "work_mem", "shared_buffers",
         ],
+        "query_optimization": [
+            "batch", "batching", "preload", "eager load",
+            "n+1", "reduce calls", "combine queries",
+        ],
     }
     return variants.get(category, [category.replace("_", " ")])
 

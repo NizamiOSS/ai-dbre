@@ -1,0 +1,72 @@
+name: index_bloat_from_updates
+description: >
+  A table with a B-tree index is heavily updated on the indexed column,
+  causing index page fragmentation and bloat. The agent should detect
+  the bloated index via pgstattuple analysis and recommend REINDEX.
+category: bloat
+
+setup:
+  - |
+    DROP TABLE IF EXISTS eval_index_bloat_test CASCADE;
+  - |
+    CREATE TABLE eval_index_bloat_test (
+      id serial PRIMARY KEY,
+      status_code integer NOT NULL DEFAULT 0,
+      category text NOT NULL DEFAULT 'pending',
+      payload text NOT NULL DEFAULT repeat('x', 100)
+    );
+  - |
+    INSERT INTO eval_index_bloat_test (status_code, category, payload)
+    SELECT
+      (random() * 10)::int,
+      (ARRAY['pending','active','closed'])[floor(random()*3+1)::int],
+      repeat('x', 100)
+    FROM generate_series(1, 80000);
+  # Create index on the column we'll heavily update
+  - |
+    CREATE INDEX idx_eval_bloat_status ON eval_index_bloat_test (status_code);
+  - |
+    CREATE INDEX idx_eval_bloat_category ON eval_index_bloat_test (category);
+  - |
+    ANALYZE eval_index_bloat_test;
+  # Heavy updates on indexed columns — each update creates new index entries
+  # while old ones become dead, fragmenting the B-tree pages
+  - |
+    UPDATE eval_index_bloat_test SET status_code = status_code + 1;
+  - |
+    UPDATE eval_index_bloat_test SET category = 'processing';
+  - |
+    UPDATE eval_index_bloat_test SET status_code = status_code + 1;
+  - |
+    UPDATE eval_index_bloat_test SET category = 'completed';
+  - |
+    UPDATE eval_index_bloat_test SET status_code = status_code + 1;
+  - |
+    UPDATE eval_index_bloat_test SET category = 'archived';
+
+prompt: >
+  Check for index bloat across the database. Are any indexes
+  fragmented or oversized compared to their data?
+
+expected:
+  root_cause: "index bloat on eval_index_bloat_test due to heavy updates fragmenting B-tree pages"
+  root_cause_keywords:
+    - "bloat"
+    - "index"
+    - "eval_index_bloat_test"
+  affected_objects:
+    - "eval_index_bloat_test"
+    - "idx_eval_bloat_status"
+    - "idx_eval_bloat_category"
+  tools_must_call:
+    - "get_index_bloat"
+  tools_should_call:
+    - "get_table_bloat"
+    - "get_table_stats"
+  fix_category: "reindex"
+  fix_keywords:
+    - "REINDEX"
+    - "bloat"
+
+teardown:
+  - "DROP TABLE IF EXISTS eval_index_bloat_test CASCADE;"

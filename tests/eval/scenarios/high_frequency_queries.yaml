@@ -1,0 +1,71 @@
+name: high_frequency_n_plus_one
+description: >
+  The same simple query is executed thousands of times (simulating an N+1
+  query pattern from an ORM). Each call is fast individually, but the
+  aggregate impact is significant. The agent should detect this pattern
+  via pg_stat_statements call counts and recommend query batching or
+  preloading.
+category: query
+
+setup:
+  - |
+    DROP TABLE IF EXISTS eval_n_plus_one CASCADE;
+  - |
+    CREATE TABLE eval_n_plus_one (
+      id serial PRIMARY KEY,
+      parent_id integer,
+      name text NOT NULL DEFAULT 'item',
+      value numeric(10,2) DEFAULT 0
+    );
+  - |
+    INSERT INTO eval_n_plus_one (parent_id, name, value)
+    SELECT
+      (random() * 100)::int,
+      'item_' || g,
+      (random() * 100)::numeric(10,2)
+    FROM generate_series(1, 50000) g;
+  - |
+    CREATE INDEX idx_eval_npo_parent ON eval_n_plus_one (parent_id);
+  - |
+    ANALYZE eval_n_plus_one;
+  # Simulate N+1: run the same parameterized query many times
+  # pg_stat_statements will merge these into one entry with high call count
+  - |
+    DO $$
+    BEGIN
+      FOR i IN 1..500 LOOP
+        PERFORM * FROM eval_n_plus_one WHERE parent_id = (i % 100);
+      END LOOP;
+    END $$;
+  - |
+    DO $$
+    BEGIN
+      FOR i IN 1..500 LOOP
+        PERFORM * FROM eval_n_plus_one WHERE parent_id = (i % 100);
+      END LOOP;
+    END $$;
+
+prompt: >
+  Analyze query patterns in the database. Are there any queries being
+  called excessively that might indicate an N+1 problem or inefficient
+  access pattern?
+
+expected:
+  root_cause: "high-frequency repeated query on eval_n_plus_one suggesting N+1 pattern"
+  root_cause_keywords:
+    - "calls"
+    - "eval_n_plus_one"
+    - "parent_id"
+  affected_objects:
+    - "eval_n_plus_one"
+  tools_must_call:
+    - "get_slow_queries"
+  tools_should_call:
+    - "explain_query"
+    - "get_table_stats"
+  fix_category: "query_optimization"
+  fix_keywords:
+    - "batch"
+
+teardown:
+  - "DROP TABLE IF EXISTS eval_n_plus_one CASCADE;"
