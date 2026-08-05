@@ -276,8 +276,9 @@ accessible over the network instead of local stdio.
  
 The eval harness validates diagnostic accuracy against known problems. Each
 scenario is defined declaratively in YAML — induce a problem, run the agent,
-score the diagnosis, clean up. Five scenarios ship today: missing indexes, table
-bloat, vacuum starvation, unused indexes, and stale statistics.
+score the diagnosis, clean up. Eight scenarios ship today: missing indexes,
+table bloat, vacuum starvation, unused indexes, stale statistics, index bloat,
+high-frequency N+1 queries, and duplicate indexes.
  
 ```bash
 # Run all scenarios (deterministic scoring)
