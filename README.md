@@ -6,9 +6,6 @@ Built with **LangGraph** + **Claude Sonnet** + **pg_stat_statements** + **pgstat
 
 > 🎯 Phase 4: Streamlit dashboard, GitHub Actions CI, open-source release
 
-## Demo
-
-[![asciicast](https://asciinema.org/a/yZg00cNeEJrhPJvu.svg)](https://asciinema.org/a/yZg00cNeEJrhPJvu)
 
 ---
 
