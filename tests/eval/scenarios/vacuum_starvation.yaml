@@ -48,8 +48,8 @@ expected:
     - "eval_vacuum_starved"
   affected_objects:
     - "eval_vacuum_starved"
-  tools_must_call:
-    - "get_vacuum_status"
+  tools_must_call_any:
+    - ["diagnose_bloat", "get_vacuum_status"]
   tools_should_call:
     - "get_table_stats"
     - "get_table_bloat"

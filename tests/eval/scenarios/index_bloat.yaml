@@ -58,8 +58,8 @@ expected:
     - "eval_index_bloat_test"
     - "idx_eval_bloat_status"
     - "idx_eval_bloat_category"
-  tools_must_call:
-    - "get_index_bloat"
+  tools_must_call_any:
+    - ["diagnose_bloat", "get_index_bloat"]
   tools_should_call:
     - "get_table_bloat"
     - "get_table_stats"

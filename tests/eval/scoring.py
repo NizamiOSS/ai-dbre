@@ -109,9 +109,24 @@ def score_tools_must_call(
 ) -> CriterionResult:
     """
     Score: did the agent call every required tool?
-    1.0 = all called, 0.0 = none called, proportional in between.
+
+    Supports two formats:
+    - tools_must_call: ["tool_a", "tool_b"] — all must be called
+    - tools_must_call_any: [["tool_a", "composite_a"], ["tool_b"]]
+      — at least one from each group must be called
     """
-    if not expected.tools_must_call:
+    called = trace.tool_names_called
+    requirements = []
+
+    for tool_name in (expected.tools_must_call or []):
+        requirements.append((tool_name, tool_name in called))
+
+    for group in getattr(expected, "tools_must_call_any", []) or []:
+        group_satisfied = any(t in called for t in group)
+        label = " or ".join(group)
+        requirements.append((label, group_satisfied))
+
+    if not requirements:
         return CriterionResult(
             name="tools_must_call",
             score=1.0,
@@ -119,16 +134,14 @@ def score_tools_must_call(
             details="No required tools specified",
         )
 
-    called = trace.tool_names_called
-    required = set(expected.tools_must_call)
-    found = required & called
-    missing = required - called
+    satisfied = [r for r in requirements if r[1]]
+    missing = [r[0] for r in requirements if not r[1]]
 
-    score = len(found) / len(required)
+    score = len(satisfied) / len(requirements)
 
-    details = f"Called {len(found)}/{len(required)}"
+    details = f"Met {len(satisfied)}/{len(requirements)} requirements"
     if missing:
-        details += f" — missing: {', '.join(sorted(missing))}"
+        details += f" — missing: {', '.join(missing)}"
 
     return CriterionResult(
         name="tools_must_call",

@@ -91,7 +91,12 @@ def get_vacuum_status(table_name: str | None = None) -> str:
             END                                                      AS xid_risk_level,
 
             -- Table size
-            pg_size_pretty(pg_total_relation_size(s.relid))          AS total_size
+            pg_size_pretty(pg_total_relation_size(s.relid))          AS total_size,
+
+            EXISTS (
+            SELECT 1 FROM unnest(c.reloptions) opt
+            WHERE opt = 'autovacuum_enabled=false'
+            ) AS autovacuum_disabled
 
         FROM pg_stat_user_tables s
         JOIN pg_class c ON c.oid = s.relid

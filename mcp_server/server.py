@@ -49,6 +49,8 @@ from tools.bloat_detection import get_table_bloat as _get_table_bloat
 from tools.bloat_detection import get_index_bloat as _get_index_bloat
 from tools.vacuum_monitor import get_vacuum_status as _get_vacuum_status
 from tools.vacuum_monitor import get_autovacuum_activity as _get_autovacuum_activity
+from tools.diagnose_bloat import diagnose_bloat as _diagnose_bloat
+from tools.diagnose_slow_queries import diagnose_slow_queries as _diagnose_slow_queries
 
 
 # =============================================================================
@@ -129,6 +131,67 @@ def explain_query(query_text: str, analyze: bool = True) -> str:
         "analyze": analyze,
     })
 
+# =============================================================================
+# Composite Diagnostic Tools — Cross-Referenced Analysis
+# =============================================================================
+
+@mcp.tool()
+def diagnose_bloat(table_name: Optional[str] = None) -> str:
+    """
+    Comprehensive bloat diagnosis combining table bloat, index bloat,
+    and vacuum status into a single cross-referenced assessment.
+
+    Includes dead tuple analysis, index bloat via pgstattuple,
+    autovacuum health, and vacuum timing — no need to call
+    get_table_bloat, get_index_bloat, or get_vacuum_status separately.
+
+    Use this for broad "is there bloat?" or "check database health"
+    questions. For targeted inspection of one specific metric, use
+    the individual tools instead.
+
+    Args:
+        table_name: Specific table to diagnose, or None to scan all tables.
+
+    Returns:
+        JSON with a summary line and per-table diagnoses including
+        urgency level, problem description, and recommended actions.
+    """
+    params = {"table_name": table_name} if table_name else {}
+    return _diagnose_bloat.invoke(params)
+
+
+@mcp.tool()
+def diagnose_slow_queries(
+    order_by: str = "total_time",
+    min_calls: int = 1,
+    top_n: int = 5,
+) -> str:
+    """
+    Diagnose the slowest queries by pulling top offenders from
+    pg_stat_statements and running EXPLAIN on each to identify
+    root causes (missing indexes, N+1 patterns, stale stats).
+
+    Includes query classification, plan analysis, and fix suggestions —
+    no need to call get_slow_queries and explain_query separately.
+
+    Use this for broad "what's slow?" or "find performance issues"
+    questions. For examining a specific known query, use explain_query
+    directly instead.
+
+    Args:
+        order_by: How to rank — "total_time" (default), "mean_time", or "calls".
+        min_calls: Minimum call count to include (default 1).
+        top_n: Number of top queries to diagnose (default 5, max 10).
+
+    Returns:
+        JSON with a summary line and per-query diagnoses including
+        classified pattern, problem description, and suggested fixes.
+    """
+    return _diagnose_slow_queries.invoke({
+        "order_by": order_by,
+        "min_calls": min_calls,
+        "top_n": top_n,
+    })
 
 # =============================================================================
 # Diagnostic Tools — Table & Index Stats

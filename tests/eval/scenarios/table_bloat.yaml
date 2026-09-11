@@ -41,8 +41,8 @@ expected:
     - "eval_bloat_test"
   affected_objects:
     - "eval_bloat_test"
-  tools_must_call:
-    - "get_table_bloat"
+  tools_must_call_any:
+    - ["diagnose_bloat", "get_table_bloat"]
   tools_should_call:
     - "get_vacuum_status"
     - "get_table_stats"

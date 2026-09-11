@@ -58,8 +58,8 @@ expected:
     - "parent_id"
   affected_objects:
     - "eval_n_plus_one"
-  tools_must_call:
-    - "get_slow_queries"
+  tools_must_call_any:
+    - ["diagnose_bloat", "get_slow_queries"]
   tools_should_call:
     - "explain_query"
     - "get_table_stats"

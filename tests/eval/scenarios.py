@@ -24,6 +24,7 @@ class ExpectedOutcome:
     root_cause_keywords: list[str] = field(default_factory=list)
     affected_objects: list[str] = field(default_factory=list)
     tools_must_call: list[str] = field(default_factory=list)
+    tools_must_call_any: list[list[str]] = field(default_factory=list)
     tools_should_call: list[str] = field(default_factory=list)
     fix_category: str = ""
     fix_keywords: list[str] = field(default_factory=list)
@@ -128,8 +129,8 @@ def _validate_scenario_data(data: dict, path: str) -> None:
     if not isinstance(data["setup"], list):
         raise ValueError(f"'setup' must be a list of SQL strings in {path}")
 
-    if "tools_must_call" not in expected:
+    if "tools_must_call" not in expected and "tools_must_call_any" not in expected:
         raise ValueError(
-            f"Missing 'expected.tools_must_call' in {path} — "
+            f"Missing 'expected.tools_must_call' or 'expected.tools_must_call_any' in {path} — "
             f"at least one required tool must be specified"
         )

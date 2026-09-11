@@ -37,6 +37,8 @@ from agent.prompts import SYSTEM_PROMPT
 from agent.config import settings
 
 # Import diagnostic tools (read-only)
+from tools.diagnose_bloat import diagnose_bloat
+from tools.diagnose_slow_queries import diagnose_slow_queries
 from tools.slow_queries import get_slow_queries, get_active_long_queries
 from tools.explain_query import explain_query
 from tools.table_stats import get_table_stats, get_index_usage
@@ -53,6 +55,8 @@ from tools.remediation import execute_remediation
 # =============================================================================
 
 DIAGNOSTIC_TOOLS = [
+    diagnose_bloat,
+    diagnose_slow_queries,
     get_slow_queries,
     get_active_long_queries,
     explain_query,
